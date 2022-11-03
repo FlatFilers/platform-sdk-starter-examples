@@ -1,3 +1,5 @@
+import { FlatfileRecord } from '@flatfile/hooks';
+
 // Below are examples of record level hooks that run at the individual record (row) level
 // Each example assumes that the fields being referenced or manipulated exist in index.ts
 
@@ -20,7 +22,7 @@
         "Violet"
     ];
     
-    recordCompute: (record) => {
+    recordCompute: (record, session, logger) => {
       if (record.get('Registered_Product')) {
         let validProduct = validProducts.find(product => product.toLowerCase() == record.get('Registered_Product').toLowerCase())
         if (validProduct) {
@@ -35,6 +37,7 @@
     },
 
 // check that one of two possible fields exists, multiple times
+import * as G from "../typeGuards";
     const checkForOneOrTheOther =
         (
             field1: { key: string; label: string },
@@ -77,6 +80,9 @@
     },
 
 // Splits value into first name & last name if full name is entered in first name field
+const isNil = (val: any) => val === null || val === undefined || val === "";
+const isNotNil = (val: any) => !isNil(val);
+
     recordCompute: (record) => {
         const firstName = record.get('firstName')
         const lastName = record.get('lastName')                
@@ -110,6 +116,8 @@
     },
 
 // re-format date fields - requires datefns
+import * as dfns from "date-fns";
+
     recordCompute: (record) => {
       const date = record.get('createDate')
         if (isNotNil(date)) {
@@ -128,18 +136,13 @@
     },
 
 // validation functions that can be run in record hooks 
-
-import * as FF from "@flatfile/configure";
-import { FlatfileRecord } from "@flatfile/hooks";
 import * as Ap from "fp-ts/Apply";
 import * as E from "fp-ts/Either";
-import * as NEA from "fp-ts/NonEmptyArray";
 import * as O from "fp-ts/Option";
 import * as RR from "fp-ts/ReadonlyRecord";
-import { Lazy, pipe } from "fp-ts/function";
-import * as Str from "fp-ts/string";
+import { pipe } from "fp-ts/function";
 import * as t from "io-ts";
-import { fold, runValidations, ValidationResult } from "./utils";
+import { fold} from "./utils";
 
 
 const balancedOwnerPercentages = (record: FlatfileRecord): FlatfileRecord => {
@@ -189,3 +192,47 @@ const checkCorrespondingRTN = (record: FlatfileRecord): FlatfileRecord => {
     ),
   );
 };
+
+recordCompute: (record, _session, _logger) => {
+      return fold(balancedOwnerPercentages)(record);
+      return fold(checkCorrespondingRTN)(record);
+    },
+    
+//Conditional required fields
+import * as G from "../typeGuards";
+import { match } from "ts-pattern";
+
+type TransactionType = "ONE" | "TWO" | "THREE" | "FOUR" | "FIVE";
+
+const requiredFields = (record: FlatfileRecord): FlatfileRecord => {
+  const device_type = record.get("device_type");
+  const carrier = record.get("losing_carrier");
+  const transaction_type = record.get("transaction_type");
+
+    // ignore possible `null` value when matching
+
+  if (G.isNil(carrier)) {
+    match(transaction_type as TransactionType)
+      .with("FOUR", () => {
+        record.addError("carrier", "Field is required.");
+      })
+      .otherwise(() => {});
+  }
+
+  if (G.isNil(device_type)) {
+    match(transaction_type as TransactionType)
+      .with("ONE", () => {
+        record.addError("device_type", "Field is required.");
+      })
+      .with("TWO", () => {
+        record.addError("device_type", "Field is required.");
+      })
+      .with("THREE", () => {
+        record.addError("device_type", "Field is required.");
+      })
+      .otherwise(() => {});
+  }
+  
+  recordCompute: (record, _logger) => {
+      return fold(requiredFields)(record);
+    },
